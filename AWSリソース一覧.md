@@ -29,11 +29,11 @@ MineDevOpsプロジェクトで使用するAWSリソースの詳細一覧
 - **用途**: ネットワーク分離とセキュリティ
 
 ### サブネット
-- **パブリックサブネット**: 10.0.1.0/24
+- **パブリックサブネット**: 10.0.1.0/24 (254個のIP)
   - 用途: Velocityプロキシサーバー
 - **プライベートサブネット**: 
-  - 10.0.2.0/24 (Fargateタスク用)
-  - 10.0.3.0/24 (データベース・EFS用)
+  - 10.0.2.0/22 (1022個のIP - Fargateタスク用)
+  - 10.0.6.0/24 (254個のIP - データベース・EFS用)
 
 ### セキュリティグループ
 - **sg-velocity-server**
@@ -110,11 +110,11 @@ Public Subnet (10.0.1.0/24)
     ↓
 Velocity Proxy Server (固定パブリックIP)
     ↓
-Private Subnet - Compute (10.0.2.0/24)
+Private Subnet - Compute (10.0.2.0/22) ※1000台分対応
     ↓
 Fargate Tasks (Minecraft Servers)
     ↓
-Private Subnet - Data (10.0.3.0/24)
+Private Subnet - Data (10.0.6.0/24)
     ↓
 Amazon RDS (ユーザー・課金データ)
 ```

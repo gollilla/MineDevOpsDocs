@@ -17,7 +17,7 @@ MineDevOpsは、ユーザーにMinecraft開発サーバーを提供するPaaSサ
 
 ### Minecraftサーバーインフラ
 - **コンテナプラットフォーム**: AWS Fargate
-- **データストレージ**: Amazon EFS (Elastic File System)
+- **データストレージ**: ストレージレス設計（一時的な開発環境）
 - **プロキシサーバー**: Velocity Proxy Server（固定パブリックエンドポイント）
 - **ネットワーク**: AWS VPC（パブリック・プライベートサブネット構成）
 - **オーケストレーション**: AWS ECS + PHP AWS SDK連携
@@ -44,7 +44,6 @@ AWS_ACCESS_KEY_ID=your_access_key
 AWS_SECRET_ACCESS_KEY=your_secret_key
 AWS_DEFAULT_REGION=ap-northeast-1
 AWS_ECS_CLUSTER=minecraft-cluster
-AWS_EFS_FILESYSTEM_ID=fs-minecraft-data
 ```
 
 **サービス実装例**
@@ -72,7 +71,7 @@ class MinecraftServerService
             'launchType' => 'FARGATE',
             'networkConfiguration' => [
                 'awsvpcConfiguration' => [
-                    'subnets' => ['subnet-private-1', 'subnet-private-2'],
+                    'subnets' => ['subnet-private-fargate-1', 'subnet-private-fargate-2'],
                     'securityGroups' => ['sg-minecraft-servers'],
                     'assignPublicIp' => 'DISABLED'
                 ]
@@ -122,37 +121,26 @@ Internet → Velocity Proxy (Public IP) → Fargate Tasks (Private Subnets)
 - VPC: 10.0.0.0/16
 - パブリックサブネット: 10.0.1.0/24 (Velocityサーバー)
 - プライベートサブネット: 
-  - 10.0.2.0/24 (Fargateタスク用)
-  - 10.0.3.0/24 (データベース・EFS用)
+  - 10.0.2.0/22 (1022個のIP - Fargateタスク用、1000台対応)
+  - 10.0.6.0/24 (データベース用)
 
 **セキュリティグループ**
 - Velocityサーバー: Inbound 25565（0.0.0.0/0から）、Outbound（プライベートサブネットへ）
 - Fargateタスク: Inbound 25565（Velocity SGからのみ）
 
 ### データ管理
-**EFS構造**
-```
-fs-minecraft-data/
-├── user_1/
-│   ├── world/          # ワールドデータ
-│   ├── plugins/        # プラグイン設定
-│   ├── config/         # server.properties
-│   └── logs/           # サーバーログ
-├── user_2/
-└── ...
-```
-
-**Fargateボリューム設定**
-- ユーザー別EFSマウント: `/minecraft/data → /user_{id}/`
-- トランジット暗号化有効
-- EFS Backupによる自動バックアップ
+**ストレージレス設計**
+- **永続化なし**: 毎回新しいワールドでクリーンスタート
+- **一時的な開発環境**: セッション終了時にデータは削除
+- **高速起動**: ストレージマウント不要で即座に開始
+- **コンテナ内一時ストレージ**: 実行中のみワールドデータを保持
 
 ### サーバーライフサイクル
 1. **手動開始**: ユーザーがWebインターフェースからサーバー開始を実行
 2. **動的開始**: ECSがユーザー固有設定でFargateタスクを実行
 3. **プロキシ登録**: Velocityが新しいサーバーエンドポイントで更新
 4. **手動停止**: ユーザーが完了時にWebインターフェースからサーバーを停止
-5. **データ永続化**: ユーザーデータはEFS上に保持
+5. **データ削除**: セッション終了と共にワールドデータは削除
 
 ### インフラ考慮事項
 - **スケーリング**: CPU/メモリ使用量ベースのFargate自動スケーリング
